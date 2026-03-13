@@ -7,6 +7,7 @@ import jakarta.validation.constraints.PositiveOrZero;
 import lombok.*;
 
 import java.math.BigDecimal; // Importante para o preço
+import java.util.Set;
 
 @Getter
 @Setter
@@ -38,4 +39,9 @@ public class ProdutosEntity {
     @PositiveOrZero(message = "A quantidade não pode ser negativa")
     @Column(name = "quantidade_estoque")
     private Integer quantidadeEstoque; // Mudamos de String para Integer e corrigimos o nome
+
+    @ManyToMany(mappedBy = "produtos") // Indica que o lado dono é a PedidosEntity
+    private Set<PedidosEntity> pedidos;
+
+
 }
