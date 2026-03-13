@@ -28,7 +28,8 @@ public class ProdutosEntity {
 
     @NotBlank(message = "O SKU é obrigatório")
     @Column(name = "sku", unique = true, nullable = false)
-    private String sku;
+    private String sku; //SKU significa Stock Keeping Unit (Unidade de Manutenção de Estoque).
+    // O SKU é o código simplificado que o lojista cria para achar esse produto rápido no estoque.
 
     @NotNull(message = "O preço é obrigatório")
     @PositiveOrZero(message = "O preço deve ser zero ou maior")
