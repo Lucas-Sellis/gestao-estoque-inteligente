@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: estoque-db
+    environment:
+      POSTGRES_DB: db_gerenciamento_estoque_inteligente
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1234
+    ports:
+      - "5432:5432"
+
+  # ADICIONAMOS O REDIS AQUI
+  redis:
+    image: redis:alpine
+    container_name: estoque-redis
+    ports:
+      - "6379:6379"
+
+  # O serviço 'app' só deve ser usado se você já tiver o Dockerfile pronto
+  # Para desenvolver no IntelliJ, você pode rodar apenas o DB e o REDIS
