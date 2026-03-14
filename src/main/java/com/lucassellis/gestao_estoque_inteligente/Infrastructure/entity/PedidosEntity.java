@@ -28,13 +28,15 @@ public class PedidosEntity {
     @Column(name = "cliente", nullable = false)
     private String cliente;
 
-    @ManyToMany
-    @JoinTable(
+    @ManyToMany // muitos para muitos ou seja muitos pedidos para muitos produtos
+    @JoinTable(// ajunte a tabela
             name = "pedido_produto", // Nome da tabela intermediária que o JPA criará
-            joinColumns = @JoinColumn(name = "pedido_id"),
-            inverseJoinColumns = @JoinColumn(name = "produto_id")
+            joinColumns = @JoinColumn(name = "pedido_id"), // o podido id
+            inverseJoinColumns = @JoinColumn(name = "produto_id") // vai se juntar na tabela produto id
     )
     private Set<ProdutosEntity> produtos;
 
+
+    // aqui basicamente é a tabela pedidos no banco de dadpos e ela e o pai entre as duas
     //No seu caso, o Pedido faz todo o sentido ser o dono, pois é ele quem "escolhe" os produtos.
 }

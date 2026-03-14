@@ -44,5 +44,7 @@ public class ProdutosEntity {
     @ManyToMany(mappedBy = "produtos") // Indica que o lado dono é a PedidosEntity
     private Set<PedidosEntity> pedidos;
 
+ // as entites nada mais sao que nossa tbela no banco de dados aqui no caso essa tabela produtos é ligada a tabela pedidos
+    // pois podem haver varios pedidos com o mesmo produto
 
 }
