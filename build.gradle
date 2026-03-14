@@ -37,6 +37,14 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	implementation 'org.mapstruct:mapstruct:1.5.5.Final'
+            annotationProcessor 'org.mapstruct:mapstruct-processor:1.5.5.Final'
+
+    // Se usar Lombok, precisa dessa ponte aqui:
+     compileOnly 'org.projectlombok:lombok'
+     annotationProcessor 'org.projectlombok:lombok'
+     annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
 }
 
 tasks.named('test') {
