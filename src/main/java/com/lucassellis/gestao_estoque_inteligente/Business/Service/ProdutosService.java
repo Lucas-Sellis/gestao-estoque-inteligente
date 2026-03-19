@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 public class ProdutosService {
 
     private final ProdutosRepository repository;
+
     private final ProdutosMapper mapper;
 
     /**
@@ -31,6 +32,7 @@ public class ProdutosService {
      */
     @CacheEvict(value = "produtos", allEntries = true)
     public ProdutosDTOResponse criar(ProdutosDTORequest dto) {
+
         try {
             // Converte o DTO que chegou da API para a Entity que o banco entende
             ProdutosEntity entity = mapper.toEntity(dto);
@@ -69,25 +71,60 @@ public class ProdutosService {
      * nada seja salvo no banco. Ou faz tudo, ou não faz nada.
      */
     @Transactional
-    @CacheEvict(value = "produtos", allEntries = true) // Limpa o cache pois os dados de estoque mudaram
-    public ProdutosDTOResponse atualizarEstoque(Long id, Integer quantidadeAlterada) {
-        // Busca o produto pelo ID ou lança erro 404 personalizado
+    @CacheEvict(value = "produtos", allEntries = true)
+    public ProdutosDTOResponse atualizarEstoque(Long id, ProdutosDTORequest dto) {
+
         ProdutosEntity entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Produto não encontrado."));
 
-        // Lógica Matemática:
-        // Se quantidadeAlterada for 10, soma ao que tem.
-        // Se for -5 (uma venda), subtrai do que tem.
-        int novoEstoque = entity.getQuantidadeEstoque() + quantidadeAlterada;
+        int novoEstoque = entity.getQuantidadeEstoque() + dto.getQuantidadeAlterada();
 
-        // Validação de segurança: O estoque nunca pode ser menor que zero
         if (novoEstoque < 0) {
             throw new ConflictException("Estoque insuficiente para realizar essa operação.");
         }
 
-        // Atualiza o valor na entidade e salva
         entity.setQuantidadeEstoque(novoEstoque);
 
         return mapper.toResponseDto(repository.save(entity));
     }
+
+    // MÉTODO AUXILIAR (ATALHO)
+// Aqui eu continuo podendo chamar com número direto (ex: -1)
+// Ele transforma o número em DTO e reaproveita o método principal
+    public ProdutosDTOResponse atualizarEstoque(Long id, Integer quantidadeAlterada) {
+
+        ProdutosDTORequest dto = new ProdutosDTORequest();
+        dto.setQuantidadeAlterada(quantidadeAlterada);
+
+        return atualizarEstoque(id, dto);
+    }
+
+    @Cacheable(value = "produtos", key = "#id") // "Anota no post-it" usando o ID como chave
+    public ProdutosDTOResponse buscarPorId(Long id) {
+        // 1. O repository busca no Postgres e devolve um Optional (pode ter ou não o produto)
+        return repository.findById(id)
+
+                // 2. Se achou, a "esteira" (map) pega a Entity e transforma no DTO de saída (Response)
+                .map(mapper::toResponseDto)
+
+                // 3. Se a esteira estiver vazia (não achou o ID), lança o nosso erro personalizado
+                .orElseThrow(() -> new ResourceNotFoundException("Produto com ID " + id + " não encontrado."));
+    }
+
+    @Transactional
+    public void deletar(Long id) {
+
+        if (!repository.existsById(id)) {
+            throw new ResourceNotFoundException("Categoria não existe.");
+        }
+
+        try {
+            repository.deleteById(id);
+        } catch (DataIntegrityViolationException e) {
+            // IMPORTANTE: Se tiver produtos dentro da categoria, o banco não deixa deletar.
+            throw new ConflictException("Não é possível deletar: existem produtos vinculados.");
+        }
+    }
+
+
 }

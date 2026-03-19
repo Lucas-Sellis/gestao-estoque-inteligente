@@ -5,6 +5,7 @@ import com.lucassellis.gestao_estoque_inteligente.Business.dto.in.PedidosDTORequ
 import com.lucassellis.gestao_estoque_inteligente.Business.dto.out.PedidosDTOResponse;
 import com.lucassellis.gestao_estoque_inteligente.Infrastructure.entity.PedidosEntity;
 import com.lucassellis.gestao_estoque_inteligente.Infrastructure.entity.ProdutosEntity;
+import com.lucassellis.gestao_estoque_inteligente.Infrastructure.exceptions.ResourceNotFoundException;
 import com.lucassellis.gestao_estoque_inteligente.Infrastructure.repository.PedidosRepository;
 import com.lucassellis.gestao_estoque_inteligente.Infrastructure.repository.ProdutosRepository;
 import lombok.RequiredArgsConstructor;
@@ -18,55 +19,81 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@Service // service dos pedidos
-@RequiredArgsConstructor // trazemos os contrutores (Lombok)
+@Service
+@RequiredArgsConstructor
 public class PedidosService {
 
     private final PedidosRepository pedidoRepository;
     private final ProdutosRepository produtoRepository;
-    private final ProdutosService produtosService; // Injetamos a service para usar a lógica de estoque
+    private final ProdutosService produtosService; // Para mexer no estoque
     private final PedidosMapper mapper;
 
     @Transactional
-    @CacheEvict(value = {"produtos", "pedidos"}, allEntries = true) // Limpa o "post-it" (Redis) porque o estoque mudou e tem pedido novo
-    public PedidosDTOResponse criarPedido(PedidosDTORequest dto) { // criando um pedido
+    @CacheEvict(value = {"produtos", "pedidos"}, allEntries = true)
+    public PedidosDTOResponse criarPedido(PedidosDTORequest dto) {
+        PedidosEntity pedido = new PedidosEntity();
+        pedido.setCliente(dto.getCliente());
+        pedido.setDataPedido(LocalDateTime.now());
 
-        // 1. Criar a entidade do Pedido e definir o básico
-        PedidosEntity pedido = new PedidosEntity(); // instanciando um pedido novo
-        pedido.setCliente(dto.getCliente()); // colocando esse pedido no nome do cliente
-        pedido.setDataPedido(LocalDateTime.now()); // gravando a hora que o pedido foi feito
+        // REGRA DE OURO: Baixa o estoque de cada item na esteira
+        Set<ProdutosEntity> produtos = dto.getProdutosIds().stream()
+                .map(id -> {
+                    produtosService.atualizarEstoque(id, -1); // Tira 1 do estoque
+                    return produtoRepository.findById(id)
+                            .orElseThrow(() -> new ResourceNotFoundException("Produto " + id + " não existe."));
+                })
+                .collect(Collectors.toSet());
 
-        // 2. Buscar os produtos no banco e aplicar a REGRA DE OURO
-        Set<ProdutosEntity> produtosDoPedido =
-                dto.getProdutosIds() // pegando só os IDs que vieram no Request
-                        .stream() // colocando os IDs na esteira
-                        .map(id -> { // passando por cada ID com o map
-
-                            // REGRA: Chama o outro service para tirar 1 do estoque
-                            // Se não tiver estoque, ele já trava tudo e lança o erro de conflito
-                            produtosService.atualizarEstoque(id, -1);
-
-                            // Depois de baixar o estoque, pega o produto completo no banco
-                            return produtoRepository.findById(id).get();
-                        })
-                        .collect(Collectors.toSet()); // tira da esteira e joga dentro de um Set (caixa que não repete)
-
-        // 3. Vincular os produtos ao pedido e salvar
-        pedido.setProdutos(produtosDoPedido); // pegando os produtos da esteira e colocando no pedido
-
-        // Salvando o pedido no banco (Postgres)
-        PedidosEntity pedidoSalvo = pedidoRepository.save(pedido);
-
-        // 4. Retornar o Response formatado
-        return mapper.toResponseDto(pedidoSalvo); // voltamos para o usuário como DTO (Response)
+        pedido.setProdutos(produtos);
+        return mapper.toResponseDto(pedidoRepository.save(pedido));
     }
 
-    @Cacheable(value = "pedidos") // busca no Redis pra ser mais rápido
+    @Cacheable(value = "pedidos")
     public List<PedidosDTOResponse> listarTodos() {
-        System.out.println("Buscando pedidos no banco...");
+        return pedidoRepository.findAll().stream()
+                .map(mapper::toResponseDto)
+                .collect(Collectors.toList());
+    }
 
-        return pedidoRepository.findAll().stream() // coloca os pedidos na esteira
-                .map(mapper::toResponseDto) // transforma em DTO de saída
-                .collect(Collectors.toList()); // joga tudo numa lista
+    @Cacheable(value = "pedidos", key = "#id")
+    public PedidosDTOResponse buscarPorId(Long id) {
+        return pedidoRepository.findById(id)
+                .map(mapper::toResponseDto)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido " + id + " não encontrado."));
+    }
+
+    @Transactional
+    @CacheEvict(value = {"produtos", "pedidos"}, allEntries = true)
+    public void deletarPedido(Long id) {
+        PedidosEntity pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado."));
+
+        // Devolve o estoque antes de excluir o registro
+        pedido.getProdutos().forEach(p -> produtosService.atualizarEstoque(p.getId(), 1));
+
+        pedidoRepository.delete(pedido);
+    }
+
+    @Transactional
+    @CacheEvict(value = {"produtos", "pedidos"}, allEntries = true)
+    public PedidosDTOResponse atualizarPedido(Long id, PedidosDTORequest dto) {
+        PedidosEntity pedido = pedidoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Pedido não encontrado."));
+
+        // 1. Devolve estoque dos produtos antigos
+        pedido.getProdutos().forEach(p -> produtosService.atualizarEstoque(p.getId(), 1));
+
+        // 2. Baixa estoque dos produtos novos que vieram no DTO
+        Set<ProdutosEntity> novosProdutos = dto.getProdutosIds().stream()
+                .map(prodId -> {
+                    produtosService.atualizarEstoque(prodId, -1);
+                    return produtoRepository.findById(prodId).get();
+                })
+                .collect(Collectors.toSet());
+
+        pedido.setCliente(dto.getCliente());
+        pedido.setProdutos(novosProdutos);
+
+        return mapper.toResponseDto(pedidoRepository.save(pedido));
     }
 }
