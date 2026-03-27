@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.*;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -19,5 +20,5 @@ public class PedidosDTOResponse {
     private String cliente;
 
     // Em vez da Entity pura, usamos uma lista de DTOs simples de produto
-    private List<ProdutoResumoDTO> produtos;
+    private Set<ProdutoResumoDTO> produtos;
 }
